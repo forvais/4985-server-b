@@ -1,5 +1,5 @@
 #include "threads.h"
-#include "messaging.h"
+#include "../include/messaging.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>

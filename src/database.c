@@ -1,8 +1,11 @@
 #include "../include/database.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <ndbm.h>
 #include <p101_c/p101_stdlib.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -10,14 +13,16 @@
 
 ssize_t database_connect(int *err)
 {
-    DBM  *db;
-    datum key;
-    datum value;
-    datum result;
-
+    DBM        *db;
+    datum       key;
+    datum       value;
+    datum       result;
     const char *name   = "name";
     const char *nvalue = "Tia";
     void       *ptr;
+    const char  filename[] = "mydb";
+    char        filename_mutable[sizeof(filename)];
+    memcpy(filename_mutable, filename, sizeof(filename));
 
     ptr = malloc(strlen(name) + 1);
     if(ptr == NULL)
@@ -26,7 +31,7 @@ ssize_t database_connect(int *err)
         *err = errno;
         return -1;
     }
-    key.dptr = ptr;
+    key.dptr = (char *)ptr;
 
     ptr = malloc(strlen(nvalue) + 1);
     if(ptr == NULL)
@@ -36,7 +41,7 @@ ssize_t database_connect(int *err)
         free(key.dptr);
         return -1;
     }
-    value.dptr = ptr;
+    value.dptr = (char *)ptr;
 
     ptr = malloc(strlen(name) + strlen(nvalue) + 1);
     if(ptr == NULL)
@@ -47,9 +52,9 @@ ssize_t database_connect(int *err)
         free(value.dptr);
         return -1;
     }
-    result.dptr = ptr;
+    result.dptr = (char *)ptr;
 
-    db = dbm_open("mydb", O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    db = dbm_open(filename_mutable, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     if(!db)
     {
         perror("dbm_open failed");
@@ -61,17 +66,17 @@ ssize_t database_connect(int *err)
     }
 
     memcpy(key.dptr, name, strlen(name) + 1);
-    key.dsize = strlen((char *)key.dptr) + 1;
+    key.dsize = (int)strlen(key.dptr) + 1;
 
     memcpy(value.dptr, nvalue, strlen(nvalue) + 1);
-    value.dsize = strlen((char *)value.dptr) + 1;
+    value.dsize = (int)strlen(value.dptr) + 1;
 
     dbm_store(db, key, value, DBM_REPLACE);
 
     result = dbm_fetch(db, key);
     if(result.dptr)
     {
-        printf("Fetched value: %s\n", (char *)result.dptr);
+        printf("Fetched value: %s\n", result.dptr);
     }
 
     dbm_close(db);

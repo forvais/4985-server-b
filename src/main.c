@@ -1,5 +1,5 @@
-#include "messaging.h"
-#include "networking.h"
+#include "../include/messaging.h"
+#include "../include/networking.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <getopt.h>
