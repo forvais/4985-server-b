@@ -12,7 +12,7 @@
 #define ERR_READ (-5)
 
 
-int deserialize_header(header_t *header, const uint8_t *buf);
+
 
 void print_hex(const char *label, const uint8_t *data, size_t len)
 {
