@@ -1,12 +1,9 @@
-#include "threads.h"
-#include "../include/messaging.h"
+#include "../include/threads.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
-
-#define BUFLEN 1024
 
 int start_thread(void *(*thread_fn)(void *targs), void *targs, size_t opts)
 {
@@ -35,27 +32,4 @@ int start_thread(void *(*thread_fn)(void *targs), void *targs, size_t opts)
     }
 
     return 0;
-}
-
-void *thread_echo(void *targs)
-{
-    int err;
-
-    const thread_args *args;
-    int                connfd;
-
-    args   = (thread_args *)targs;
-    connfd = args->connfd;
-
-    err = 0;
-    if(copy(connfd, connfd, BUFLEN, &err) < 0)
-    {
-        errno = err;
-        perror("thread_echo::copy");
-        goto cleanup;
-    }
-
-cleanup:
-    close(connfd);
-    return NULL;
 }

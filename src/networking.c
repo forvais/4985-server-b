@@ -1,5 +1,5 @@
 #include "../include/networking.h"
-#include "utils.h"
+#include "../include/utils.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <memory.h>
@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-static void setup_addr(struct sockaddr_storage *sockaddr, socklen_t *socklen, char *address, in_port_t port);
+static void setup_addr(struct sockaddr_storage *sockaddr, socklen_t *socklen, const Arguments *args);
 
 int tcp_socket(struct sockaddr_storage *sockaddr, int *err)
 {
@@ -28,7 +28,7 @@ int tcp_socket(struct sockaddr_storage *sockaddr, int *err)
     return sockfd;
 }
 
-int tcp_server(char *address, in_port_t port)
+int tcp_server(const Arguments *args)
 {
     int ISETOPTION = 1;
     int err;
@@ -40,7 +40,7 @@ int tcp_server(char *address, in_port_t port)
     // Setup socket address
     socklen = 0;
     memset(&sockaddr, 0, sizeof(struct sockaddr_storage));
-    setup_addr(&sockaddr, &socklen, address, port);
+    setup_addr(&sockaddr, &socklen, args);
 
     // Create tcp socket
     err    = 0;
@@ -89,15 +89,15 @@ exit:
 /**
  * Sets up an IPv4 or IPv6 address in a socket address struct.
  */
-static void setup_addr(struct sockaddr_storage *sockaddr, socklen_t *socklen, char *address, in_port_t port)
+static void setup_addr(struct sockaddr_storage *sockaddr, socklen_t *socklen, const Arguments *args)
 {
-    if(is_ipv6(address))
+    if(is_ipv6(args->addr))
     {
         struct sockaddr_in6 *addr = (struct sockaddr_in6 *)sockaddr;
 
-        inet_pton(AF_INET6, address, &addr->sin6_addr);
+        inet_pton(AF_INET6, args->addr, &addr->sin6_addr);
         addr->sin6_family = AF_INET6;
-        addr->sin6_port   = htons(port);
+        addr->sin6_port   = htons(args->port);
 
         *socklen = sizeof(struct sockaddr_in6);
     }
@@ -105,9 +105,9 @@ static void setup_addr(struct sockaddr_storage *sockaddr, socklen_t *socklen, ch
     {
         struct sockaddr_in *addr = (struct sockaddr_in *)sockaddr;
 
-        addr->sin_addr.s_addr = inet_addr(address);
+        addr->sin_addr.s_addr = inet_addr(args->addr);
         addr->sin_family      = AF_INET;
-        addr->sin_port        = htons(port);
+        addr->sin_port        = htons(args->port);
 
         *socklen = sizeof(struct sockaddr_in);
     }

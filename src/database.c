@@ -3,9 +3,7 @@
 #include <fcntl.h>
 #include <ndbm.h>
 #include <p101_c/p101_stdlib.h>
-#include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -13,16 +11,16 @@
 
 ssize_t database_connect(int *err)
 {
-    DBM        *db;
-    datum       key;
-    datum       value;
-    datum       result;
+    DBM  *db;
+    datum key;
+    datum value;
+    datum result;
+
     const char *name   = "name";
     const char *nvalue = "Tia";
     void       *ptr;
-    const char  filename[] = "mydb";
-    char        filename_mutable[sizeof(filename)];
-    memcpy(filename_mutable, filename, sizeof(filename));
+    const char  db_filename[] = "mydb";
+    char        mutable_filename[sizeof("mydb")];
 
     ptr = malloc(strlen(name) + 1);
     if(ptr == NULL)
@@ -54,7 +52,8 @@ ssize_t database_connect(int *err)
     }
     result.dptr = (char *)ptr;
 
-    db = dbm_open(filename_mutable, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    strcpy(mutable_filename, db_filename);
+    db = dbm_open(mutable_filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
     if(!db)
     {
         perror("dbm_open failed");

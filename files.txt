@@ -1,2 +1,2 @@
-main src/main.c src/networking.c include/networking.h src/threads.c include/threads.h src/utils.c include/utils.h src/messaging.c include/messaging.h
+main src/main.c src/args.c src/networking.c include/networking.h src/threads.c include/threads.h src/utils.c include/utils.h src/messaging.c include/messaging.h
 test-database tests/database/main.c src/database.c include/database.h gdbm gdbm_compat
