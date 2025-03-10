@@ -24,7 +24,7 @@ ssize_t chat_broadcast(request_t *request)
     // server default to 0
     uint16_t sender_id = SERVER_ID;
 
-    printf("in chat_broadcast %d \n", *request->client_fd);
+    printf("in chat_broadcast %d \n", request->client->fd);
 
     ptr = (char *)request->response;
     // tag
@@ -49,7 +49,7 @@ ssize_t chat_broadcast(request_t *request)
     printf("response_len: %d\n", (request->response_len));
 
     // send ack
-    write_fully(*request->client_fd, request->response, request->response_len, &request->err);
+    write_fully(request->client->fd, request->response, request->response_len, &request->err);
 
     // broadcast
 

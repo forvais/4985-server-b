@@ -5,6 +5,7 @@
 
 #include "fsm.h"
 #include <poll.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -14,6 +15,9 @@
 #define SERVER_ID 0x0000
 #define MAX_CLIENTS 2
 #define MAX_FDS (MAX_CLIENTS + 1)
+
+extern int user_count;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
+extern int user_index;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
 
 typedef enum
 {
@@ -85,9 +89,8 @@ typedef struct request_t
     void          *content;
     size_t         len;
     int            err;
-    int           *client_fd;
+    struct pollfd *client;
     int           *session_id;
-    int           *user_count;
     uint16_t       sender_id;
     uint8_t        type;
     code_t         code;
@@ -108,21 +111,16 @@ typedef struct funcMapping
     ssize_t (*func)(request_t *request);
 } funcMapping;
 
-typedef struct user_count_t
+typedef enum
 {
-    uint8_t  type;
-    uint8_t  version;
-    uint16_t payload_len;
-    uint8_t  tag;
-    uint8_t  len;
-    uint16_t value;
-} user_count_t;
+    USR_Count = 0x0A
+} sm_type_t;
 
 const char *code_to_string(const code_t *code);
 
 void error_response(request_t *request);
 
-void event_loop(int server_fd, int *err);
+void event_loop(int server_fd, int sm_fd, int *err);
 
 fsm_state_t request_handler(void *args);
 

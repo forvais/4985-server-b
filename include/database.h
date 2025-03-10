@@ -46,6 +46,6 @@ int retrieve_int(DBM *db, const char *key, int *result);
 
 void *retrieve_byte(DBM *db, const void *key, size_t size);
 
-ssize_t init_pk(DBO *dbo, const char *pk_name, int *pk);
+ssize_t init_pk(DBO *dbo, const char *pk_name);
 
 #endif    // DATABASE_H
