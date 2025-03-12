@@ -21,38 +21,9 @@ ssize_t chat_broadcast(request_t *request)
     uint8_t     content_len;
     uint8_t     user_len;
 
-    // server default to 0
-    uint16_t sender_id = SERVER_ID;
-
     printf("in chat_broadcast %d \n", request->client->fd);
 
-    ptr = (char *)request->response;
-    // tag
-    *ptr++ = SYS_Success;
-    // version
-    *ptr++ = TWO;
-
-    // sender_id
-    sender_id = htons(sender_id);
-    memcpy(ptr, &sender_id, sizeof(sender_id));
-    ptr += sizeof(sender_id);
-
-    request->response_len = htons(request->response_len);
-    memcpy(ptr, &request->response_len, sizeof(request->response_len));
-    ptr += sizeof(request->response_len);
-
-    *ptr++ = ENUMERATED;
-    *ptr++ = sizeof(uint8_t);
-    *ptr++ = CHT_Send;
-
-    request->response_len = (uint16_t)(HEADER_SIZE + ntohs(request->response_len));
-    printf("response_len: %d\n", (request->response_len));
-
-    // send ack
-    write_fully(request->client->fd, request->response, request->response_len, &request->err);
-
     // broadcast
-
     // start from timestamp len
     ptr = (char *)request->content + HEADER_SIZE + 1;
 
