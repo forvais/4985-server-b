@@ -1,9 +1,9 @@
-#include "messaging.h"
-#include "account.h"
-#include "chat.h"
-#include "database.h"
-#include "io.h"
-#include "utils.h"
+#include "../include/messaging.h"
+#include "../include/account.h"
+#include "../include/chat.h"
+#include "../include/database.h"
+#include "../include/io.h"
+#include "../include/utils.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <memory.h>

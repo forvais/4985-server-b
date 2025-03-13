@@ -1,5 +1,5 @@
-#include "args.h"
-#include "networking.h"
+#include "../include/args.h"
+#include "../include/networking.h"
 #include <getopt.h>
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_stdlib.h>

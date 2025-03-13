@@ -1,4 +1,4 @@
-#include "fsm.h"
+#include "../include/fsm.h"
 #include <stdio.h>
 
 fsm_state_func fsm_transition(fsm_state_t from_id, fsm_state_t to_id, const struct fsm_transition transitions[], size_t transitions_size)

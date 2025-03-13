@@ -1,5 +1,5 @@
-#include "account.h"
-#include "database.h"
+#include "../include/account.h"
+#include "../include/database.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <p101_c/p101_stdio.h>

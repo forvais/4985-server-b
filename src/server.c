@@ -1,8 +1,8 @@
-#include "args.h"
-#include "fsm.h"
-#include "messaging.h"
-#include "networking.h"
-#include "utils.h"
+#include "../include/args.h"
+#include "../include/fsm.h"
+#include "../include/messaging.h"
+#include "../include/networking.h"
+#include "../include/utils.h"
 #include <errno.h>
 #include <memory.h>
 #include <netinet/in.h>

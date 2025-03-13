@@ -1,5 +1,5 @@
-#include "chat.h"
-#include "io.h"
+#include "../include/chat.h"
+#include "../include/io.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <p101_c/p101_stdio.h>

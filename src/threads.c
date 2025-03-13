@@ -1,4 +1,4 @@
-#include "threads.h"
+#include "../include/threads.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
