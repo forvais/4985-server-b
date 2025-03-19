@@ -10,11 +10,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
-#define INADDRESS "0.0.0.0"
-#define OUTADDRESS "127.0.0.1"
 #define BACKLOG 5
-#define PORT "8081"
-#define SM_PORT "8082"
 
 int main(int argc, char *argv[])
 {
@@ -32,12 +28,8 @@ int main(int argc, char *argv[])
     err    = 0;
 
     memset(&args, 0, sizeof(args_t));
-    args.addr = INADDRESS;
-    convert_port(PORT, &args.port);
-    args.sm_addr = OUTADDRESS;
-    convert_port(SM_PORT, &args.sm_port);
-
     get_arguments(&args, argc, argv);
+    validate_arguments(argv[0], &args);
 
     // Start TCP Server
     server_fd = tcp_server(args.addr, args.port, BACKLOG, &err);

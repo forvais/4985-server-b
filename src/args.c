@@ -4,6 +4,10 @@
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_stdlib.h>
 
+#define INADDRESS "0.0.0.0"
+#define OUTADDRESS "127.0.0.1"
+#define PORT "8081"
+#define SM_PORT "8082" /* Default Server->SM listening port */
 #define UNKNOWN_OPTION_MESSAGE_LEN 22
 
 _Noreturn void usage(const char *binary_name, int exit_code, const char *message)
@@ -15,11 +19,11 @@ _Noreturn void usage(const char *binary_name, int exit_code, const char *message
 
     fprintf(stderr, "Usage: %s [-h] -a <address> -p <port>\n", binary_name);
     fputs("Options:\n", stderr);
-    fputs("  -h, --help                         Display this help message\n", stderr);
-    fputs("  -a <address>, --address <address>  The address of remote server.\n", stderr);
-    fputs("  -p <port>,    --port <port>        The server port to use.\n", stderr);
-    fputs("  -A <sm address>, --sm address <sm address>  The address of server manager.\n", stderr);
-    fputs("  -P <sm port>,    --sm port <sm port>        The server manager port.\n", stderr);
+    fputs("  -h, --help                            Display this help message\n", stderr);
+    fputs("  -a <address>, --address <address>     The address of the server.\n", stderr);
+    fputs("  -p <port>,    --port <port>           The server port to use.\n", stderr);
+    fputs("  -A <address>, --sm_address <address>  The address of server manager.\n", stderr);
+    fputs("  -P <port>,    --sm_port <port>        The server manager port.\n", stderr);
     exit(exit_code);
 }
 
@@ -28,10 +32,10 @@ void get_arguments(args_t *args, int argc, char *argv[])
     int opt;
 
     static struct option long_options[] = {
-        {"address",    required_argument, NULL, 'a'},
-        {"port",       required_argument, NULL, 'p'},
-        {"sm address", required_argument, NULL, 'A'},
-        {"sm_port",    required_argument, NULL, 'P'},
+        {"address",    optional_argument, NULL, 'a'},
+        {"port",       optional_argument, NULL, 'p'},
+        {"sm_address", optional_argument, NULL, 'A'},
+        {"sm_port",    optional_argument, NULL, 'P'},
         {"help",       no_argument,       NULL, 'h'},
         {NULL,         0,                 NULL, 0  }
     };
@@ -72,5 +76,31 @@ void get_arguments(args_t *args, int argc, char *argv[])
             default:
                 usage(argv[0], EXIT_FAILURE, NULL);
         }
+    }
+}
+
+void validate_arguments(const char *binary_name, args_t *args)
+{
+    (void)(binary_name);    // Reserved for later use for options that do not have default values and
+                            // consequently need to print the help menu.
+
+    if(args->addr == NULL)
+    {
+        args->addr = INADDRESS;
+    }
+
+    if(args->port == 0)
+    {
+        convert_port(PORT, &args->port);
+    }
+
+    if(args->sm_addr == NULL)
+    {
+        args->sm_addr = OUTADDRESS;
+    }
+
+    if(args->sm_port == 0)
+    {
+        convert_port(SM_PORT, &args->sm_port);
     }
 }
