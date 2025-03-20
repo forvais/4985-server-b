@@ -1,4 +1,5 @@
 #include "utils.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,4 +52,42 @@ void setup_signal(void)
         perror("sigaction");
         exit(EXIT_FAILURE);
     }
+}
+
+/* Writes a string to a heap-allocated buffer. */
+char *strhcpy(char **dst, const char *src)
+{
+    // Get string length
+    const size_t len = strlen(src);
+
+    // Calloc buffer
+    errno = 0;
+    *dst  = (char *)calloc(len + 1, sizeof(char));
+    if(*dst == NULL)
+    {
+        return NULL;
+    }
+
+    // Copy str to buffer
+    memcpy(*dst, src, len);
+
+    return *dst;
+}
+
+/* Copies memory from a [d]ynamic buffer to a [s]tatic buffer  */
+size_t memcpyds(void *dst, const void *src, size_t static_size, size_t cpybytes)
+{
+    size_t max_bytes;
+
+    if(dst == NULL || src == NULL || static_size == 0 || cpybytes == 0)
+    {
+        errno = EINVAL;
+        return 0;
+    }
+
+    max_bytes = (cpybytes >= static_size) ? static_size : cpybytes;
+
+    memcpy(dst, src, max_bytes);
+
+    return max_bytes;
 }

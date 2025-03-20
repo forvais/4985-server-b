@@ -3,6 +3,8 @@
 #include "chat.h"
 #include "database.h"
 #include "io.h"
+#include "packets.h"
+#include "serializers.h"
 #include "utils.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -106,45 +108,21 @@ static void send_user_count(int sm_fd, char *msg, int *err)
 
 void error_response(request_t *request)
 {
-    char *ptr;
+    packet_sys_error_t packet_error;
 
-    // server default to 0
-    uint16_t    sender_id = SERVER_ID;
-    const char *msg;
-    uint8_t     msg_len;
+    uint8_t *buf;
+    size_t   buf_size;
 
-    ptr = (char *)request->response;
-    // tag
-    *ptr++ = SYS_Error;
-    // version
-    *ptr++ = TWO;
+    // Define packet_sys_error parameters
+    packet_error.header = NULL;
+    packet_error.code   = (uint8_t)request->code;
+    strhcpy(&packet_error.message, packet_error_str(packet_error.code));    // packet_error_str returns const char *, which packet_error.msg doesn't like... Use strhcpy to copy to heap.
 
-    // sender_id
-    sender_id = htons(sender_id);
-    memcpy(ptr, &sender_id, sizeof(sender_id));
-    ptr += sizeof(sender_id);
+    // Serialize the packet
+    buf_size = serialize_sys_error(&buf, &packet_error, &request->err);
 
-    msg     = code_to_string(&request->code);
-    msg_len = (uint8_t)strlen(msg);
-
-    request->response_len = (uint16_t)(request->response_len + (sizeof(uint8_t) + sizeof(uint8_t) + msg_len));
-
-    // payload len
-    request->response_len = htons(request->response_len);
-    memcpy(ptr, &request->response_len, sizeof(request->response_len));
-    ptr += sizeof(request->response_len);
-
-    *ptr++ = INTEGER;
-    *ptr++ = sizeof(uint8_t);
-
-    memcpy(ptr, &request->code, sizeof(uint8_t));
-    ptr += sizeof(uint8_t);
-
-    *ptr++ = UTF8STRING;
-    memcpy(ptr, &msg_len, sizeof(msg_len));
-    ptr += sizeof(msg_len);
-
-    memcpy(ptr, msg, msg_len);
+    // Copy to request.response
+    memcpyds(&request->response, buf, sizeof(request->response), buf_size);    // Use memcpyds to copy dynamically allocated memory into static memory
 }
 
 void event_loop(int server_fd, int sm_fd, int *err)
@@ -368,63 +346,52 @@ fsm_state_t request_handler(void *args)
         request->code = INVALID_REQUEST;
         return ERROR_HANDLER;
     }
+
     return HEADER_HANDLER;
 }
 
 fsm_state_t header_handler(void *args)
 {
-    request_t *request;
+    request_t *request = (request_t *)args;
 
-    uint16_t sender_id;
-    uint16_t len;
-    char    *ptr;
+    packet_header_t header;
+    size_t          header_size;
 
-    request = (request_t *)args;
+    // Deserialize the packet header
+    header_size = deserialize_header(&header, request->content);
+    if(header_size != PACKET_HEADER_SIZE)
+    {
+        return ERROR_HANDLER;
+    }
 
-    printf("in header_handler %d\n", request->client->fd);
-
-    ptr = (char *)request->content;
-
-    memcpy(&request->type, ptr, sizeof(request->type));
-    ptr += sizeof(request->type) + sizeof(uint8_t);
-
-    memcpy(&sender_id, ptr, sizeof(sender_id));
-    request->sender_id = ntohs(sender_id);
-    ptr += sizeof(sender_id);
-
-    printf("sender_id: %u\n", request->sender_id);
-
-    memcpy(&len, ptr, sizeof(len));
-    // printf("len size (before ntohs): %u\n", len);
-    request->len = ntohs(len);
-    printf("len size (after ntohs): %u\n", (uint16_t)request->len);
+    // Adapt to existing data model
+    request->type      = header.packet_type;
+    request->sender_id = header.sender_id;
+    request->len       = header.payload_len;
 
     return BODY_HANDLER;
 }
 
 fsm_state_t body_handler(void *args)
 {
-    request_t *request;
-    ssize_t    nread;
-    void      *buf;
+    request_t *request = (request_t *)args;
 
-    request = (request_t *)args;
-    printf("in header_handler %d\n", request->client->fd);
+    uint8_t *buf;
+    ssize_t  nread;
 
-    printf("len size: %u\n", (uint16_t)(request->len + HEADER_SIZE));
-
-    buf = realloc(request->content, request->len + HEADER_SIZE);
-    if(!buf)
+    // Expand the request->content buffer to fit the the rest of the body
+    buf = (uint8_t *)realloc(request->content, request->len + HEADER_SIZE);
+    if(buf == NULL)
     {
-        perror("Failed to realloc buf");
         return ERROR_HANDLER;
     }
     request->content = buf;
 
-    nread = read_fully(request->client->fd, (char *)request->content + HEADER_SIZE, request->len, &request->err);
+    // Read the rest of the packet
+    request->err = 0;
+    nread        = read_fully(request->client->fd, (char *)request->content + HEADER_SIZE, request->len, &request->err);
     if(nread < 0)
     {
-        perror("Read_fully error\n");
         return ERROR_HANDLER;
     }
 
@@ -464,21 +431,9 @@ fsm_state_t response_handler(void *args)
 
     printf("in response_handler %d\n", request->client->fd);
 
-    if(request->type != CHT_Send)
-    {
-        request->response_len = (uint16_t)(HEADER_SIZE + ntohs(request->response_len));
-        printf("response_len: %d\n", (request->response_len));
-
-        write_fully(request->client->fd, request->response, request->response_len, &request->err);
-    }
+    write_fully(request->client->fd, request->response, request->response_len, &request->err);
 
     free(request->content);
-
-    // for linux
-    // close(request->client->fd);
-    // request->client->fd     = -1;
-    // request->client->events = 0;
-    // *request->session_id    = -1;
     return END;
 }
 

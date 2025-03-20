@@ -9,4 +9,8 @@ void nfree(void **ptr);
 
 void setup_signal(void);
 
+char *strhcpy(char **dst, const char *src);
+
+size_t memcpyds(void *dst, const void *src, size_t static_size, size_t cpybytes);
+
 #endif
