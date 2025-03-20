@@ -4,8 +4,8 @@
 
 typedef struct
 {
-    PACKET_TYPE type;
-    const char *name;
+    SRV_PACKET_TYPE type;
+    const char     *name;
 } packet_type_t;
 
 typedef struct
