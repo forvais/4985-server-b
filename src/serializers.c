@@ -11,7 +11,7 @@
 static int assert_packet_size(const char *packet_name, size_t expected_size, size_t actual_size);
 
 // Serialization
-size_t serialize_header(uint8_t **bytes, const packet_header_t *header)
+size_t serialize_client_header(uint8_t **bytes, const packet_client_header_t *header)
 {
     size_t offset = 0;
 
@@ -20,14 +20,27 @@ size_t serialize_header(uint8_t **bytes, const packet_header_t *header)
     serialize_2_bytes(*bytes, &offset, header->sender_id);
     serialize_2_bytes(*bytes, &offset, header->payload_len);
 
-    assert_packet_size("packet_header", PACKET_HEADER_SIZE, offset);
+    assert_packet_size("packet_client_header", PACKET_CLIENT_HEADER_SIZE, offset);
+
+    return offset;
+}
+
+size_t serialize_sm_header(uint8_t **bytes, const packet_sm_header_t *header)
+{
+    size_t offset = 0;
+
+    serialize_1_byte(*bytes, &offset, header->packet_type);
+    serialize_1_byte(*bytes, &offset, header->version);
+    serialize_2_bytes(*bytes, &offset, header->payload_len);
+
+    assert_packet_size("packet_sm_header", PACKET_SM_HEADER_SIZE, offset);
 
     return offset;
 }
 
 size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet, int *err)
 {
-    packet_header_t header;
+    packet_client_header_t header;
 
     // Define sizes of members
     // NOTE: sizeof(packet_*_t) is not reliable because padding could be introduced or pointers could
@@ -38,7 +51,7 @@ size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet
     size_t offset = 0;
 
     // Define header parameters
-    memset(&header, 0, sizeof(packet_header_t));
+    memset(&header, 0, sizeof(packet_client_header_t));
     header.packet_type = PACKET_SYS_SUCCESS;
     header.version     = 1;
     header.sender_id   = packet->header != NULL ? packet->header->sender_id : SENDER_ID_DEFAULT;
@@ -46,7 +59,7 @@ size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet
 
     // Allocate space for the serialized header and data
     errno  = 0;
-    *bytes = (uint8_t *)calloc(PACKET_HEADER_SIZE + payload_len, sizeof(uint8_t));
+    *bytes = (uint8_t *)calloc(PACKET_CLIENT_HEADER_SIZE + payload_len, sizeof(uint8_t));
     if(*bytes == NULL)
     {
         *err = errno;
@@ -54,7 +67,7 @@ size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet
     }
 
     // Serialize the header
-    offset += serialize_header(bytes, &header);
+    offset += serialize_client_header(bytes, &header);
     if(offset == 0)
     {
         return 0;
@@ -65,14 +78,14 @@ size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet
     serialize_1_byte(*bytes, &offset, packet->packet_type);
 
     // Check that sizes are as expected
-    assert_packet_size("packet_sys_success", PACKET_HEADER_SIZE + payload_len, offset);
+    assert_packet_size("packet_sys_success", PACKET_CLIENT_HEADER_SIZE + payload_len, offset);
 
     return offset;
 }
 
 size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, int *err)
 {
-    packet_header_t header;
+    packet_client_header_t header;
 
     // Define sizes of members
     const size_t size_code    = sizeof(packet->code);
@@ -89,7 +102,7 @@ size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, in
     }
 
     // Define header parameters
-    memset(&header, 0, sizeof(packet_header_t));
+    memset(&header, 0, sizeof(packet_client_header_t));
     header.packet_type = PACKET_SYS_ERROR;
     header.version     = 1;
     header.sender_id   = packet->header != NULL ? packet->header->sender_id : SENDER_ID_DEFAULT;
@@ -97,7 +110,7 @@ size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, in
 
     // Allocate space for the serialized header and data
     errno  = 0;
-    *bytes = (uint8_t *)calloc(PACKET_HEADER_SIZE + payload_len, sizeof(uint8_t));
+    *bytes = (uint8_t *)calloc(PACKET_CLIENT_HEADER_SIZE + payload_len, sizeof(uint8_t));
     if(*bytes == NULL)
     {
         *err = errno;
@@ -105,7 +118,7 @@ size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, in
     }
 
     // Serialize the header
-    offset += serialize_header(bytes, &header);
+    offset += serialize_client_header(bytes, &header);
     if(offset == 0)
     {
         return 0;
@@ -121,14 +134,14 @@ size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, in
     serialize_1_byte_ptr(*bytes, &offset, (uint8_t *)packet->message, size_message);
 
     // Check that sizes are as expected
-    assert_packet_size("packet_sys_error", PACKET_HEADER_SIZE + payload_len, offset);
+    assert_packet_size("packet_sys_error", PACKET_CLIENT_HEADER_SIZE + payload_len, offset);
 
     return offset;
 }
 
 size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_success_t *packet, int *err)
 {
-    packet_header_t header;
+    packet_client_header_t header;
 
     // Define sizes of members
     const size_t size_id     = sizeof(packet->id);
@@ -137,7 +150,7 @@ size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_succe
     size_t offset = 0;
 
     // Define header parameters
-    memset(&header, 0, sizeof(packet_header_t));
+    memset(&header, 0, sizeof(packet_client_header_t));
     header.packet_type = PACKET_ACC_LOGIN_SUCCESS;
     header.version     = 1;
     header.sender_id   = packet->header != NULL ? packet->header->sender_id : SENDER_ID_DEFAULT;
@@ -145,7 +158,7 @@ size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_succe
 
     // Allocate space for the serialized header and data
     errno  = 0;
-    *bytes = (uint8_t *)calloc(PACKET_HEADER_SIZE + payload_len, sizeof(uint8_t));
+    *bytes = (uint8_t *)calloc(PACKET_CLIENT_HEADER_SIZE + payload_len, sizeof(uint8_t));
     if(*bytes == NULL)
     {
         *err = errno;
@@ -153,7 +166,7 @@ size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_succe
     }
 
     // Serialize the header
-    offset += serialize_header(bytes, &header);
+    offset += serialize_client_header(bytes, &header);
     if(offset == 0)
     {
         return 0;
@@ -164,17 +177,17 @@ size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_succe
     serialize_2_bytes(*bytes, &offset, packet->id);
 
     // Check that sizes are as expected
-    assert_packet_size("packet_acc_login_success", PACKET_HEADER_SIZE + payload_len, offset);
+    assert_packet_size("packet_acc_login_success", PACKET_CLIENT_HEADER_SIZE + payload_len, offset);
 
     return offset;
 }
 
 // Deserialization
-size_t deserialize_header(packet_header_t *header, const uint8_t *bytes)
+size_t deserialize_client_header(packet_client_header_t *header, const uint8_t *bytes)
 {
     size_t offset = 0;
 
-    memset(header, 0, sizeof(packet_header_t));
+    memset(header, 0, sizeof(packet_client_header_t));
     header->packet_type = deserialize_1_byte(bytes, &offset);
     header->version     = deserialize_1_byte(bytes, &offset);
     header->sender_id   = deserialize_2_bytes(bytes, &offset);
@@ -185,13 +198,13 @@ size_t deserialize_header(packet_header_t *header, const uint8_t *bytes)
 
 size_t deserialize_acc_login(packet_acc_login_t *packet, const uint8_t *bytes)
 {
-    packet_header_t *header;
-    ber_t            ber;
+    packet_client_header_t *header;
+    ber_t                   ber;
 
     size_t offset = 0;
 
     // Create heap allocated header
-    header = (packet_header_t *)calloc(1, sizeof(packet_header_t));
+    header = (packet_client_header_t *)calloc(1, sizeof(packet_client_header_t));
     if(header == NULL)
     {
         perror("deserialize_sys_error::calloc");
@@ -199,7 +212,7 @@ size_t deserialize_acc_login(packet_acc_login_t *packet, const uint8_t *bytes)
     }
 
     // Deserialize header
-    offset += deserialize_header(header, bytes);
+    offset += deserialize_client_header(header, bytes);
     packet->header = header;
 
     // Deserialize body
@@ -214,12 +227,12 @@ size_t deserialize_acc_login(packet_acc_login_t *packet, const uint8_t *bytes)
 
 size_t deserialize_acc_logout(packet_acc_logout_t *packet, const uint8_t *bytes)
 {
-    packet_header_t *header;
+    packet_client_header_t *header;
 
     size_t offset = 0;
 
     // Create heap allocated header
-    header = (packet_header_t *)calloc(1, sizeof(packet_header_t));
+    header = (packet_client_header_t *)calloc(1, sizeof(packet_client_header_t));
     if(header == NULL)
     {
         perror("deserialize_sys_error::calloc");
@@ -227,7 +240,7 @@ size_t deserialize_acc_logout(packet_acc_logout_t *packet, const uint8_t *bytes)
     }
 
     // Deserialize header
-    offset += deserialize_header(header, bytes);
+    offset += deserialize_client_header(header, bytes);
     packet->header = header;
 
     // Deserialize body (empty)
@@ -237,13 +250,13 @@ size_t deserialize_acc_logout(packet_acc_logout_t *packet, const uint8_t *bytes)
 
 size_t deserialize_acc_create(packet_acc_create_t *packet, const uint8_t *bytes)
 {
-    packet_header_t *header;
-    ber_t            ber;
+    packet_client_header_t *header;
+    ber_t                   ber;
 
     size_t offset = 0;
 
     // Create heap allocated header
-    header = (packet_header_t *)calloc(1, sizeof(packet_header_t));
+    header = (packet_client_header_t *)calloc(1, sizeof(packet_client_header_t));
     if(header == NULL)
     {
         perror("deserialize_acc_create::calloc");
@@ -251,7 +264,7 @@ size_t deserialize_acc_create(packet_acc_create_t *packet, const uint8_t *bytes)
     }
 
     // Deserialize header
-    offset += deserialize_header(header, bytes);
+    offset += deserialize_client_header(header, bytes);
     packet->header = header;
 
     // Deserialize body
@@ -266,13 +279,13 @@ size_t deserialize_acc_create(packet_acc_create_t *packet, const uint8_t *bytes)
 
 size_t deserialize_acc_edit(packet_acc_edit_t *packet, const uint8_t *bytes)
 {
-    packet_header_t *header;
-    ber_t            ber;
+    packet_client_header_t *header;
+    ber_t                   ber;
 
     size_t offset = 0;
 
     // Create heap allocated header
-    header = (packet_header_t *)calloc(1, sizeof(packet_header_t));
+    header = (packet_client_header_t *)calloc(1, sizeof(packet_client_header_t));
     if(header == NULL)
     {
         perror("deserialize_acc_edit::calloc");
@@ -280,7 +293,7 @@ size_t deserialize_acc_edit(packet_acc_edit_t *packet, const uint8_t *bytes)
     }
 
     // Deserialize header
-    offset += deserialize_header(header, bytes);
+    offset += deserialize_client_header(header, bytes);
     packet->header = header;
 
     // Deserialize body
@@ -295,13 +308,13 @@ size_t deserialize_acc_edit(packet_acc_edit_t *packet, const uint8_t *bytes)
 
 size_t deserialize_cht_send(packet_cht_send_t *packet, const uint8_t *bytes)
 {
-    packet_header_t *header;
-    ber_t            ber;
+    packet_client_header_t *header;
+    ber_t                   ber;
 
     size_t offset = 0;
 
     // Create heap allocated header
-    header = (packet_header_t *)calloc(1, sizeof(packet_header_t));
+    header = (packet_client_header_t *)calloc(1, sizeof(packet_client_header_t));
     if(header == NULL)
     {
         perror("deserialize_cht_send::calloc");
@@ -309,7 +322,7 @@ size_t deserialize_cht_send(packet_cht_send_t *packet, const uint8_t *bytes)
     }
 
     // Deserialize header
-    offset += deserialize_header(header, bytes);
+    offset += deserialize_client_header(header, bytes);
     packet->header = header;
 
     // Deserialize body

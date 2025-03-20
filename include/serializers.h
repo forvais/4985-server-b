@@ -4,12 +4,14 @@
 #include "packets.h"
 
 // Client/Server
-size_t serialize_header(uint8_t **bytes, const packet_header_t *header);
+size_t serialize_client_header(uint8_t **bytes, const packet_client_header_t *header);
+size_t serialize_sm_header(uint8_t **bytes, const packet_sm_header_t *header);
 size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet, int *err);
 size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, int *err);
 size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_success_t *packet, int *err);
 
-size_t deserialize_header(packet_header_t *header, const uint8_t *bytes);
+size_t deserialize_client_header(packet_client_header_t *header, const uint8_t *bytes);
+size_t deserialize_sm_header(packet_sm_header_t *header, const uint8_t *bytes);
 size_t deserialize_acc_login(packet_acc_login_t *packet, const uint8_t *bytes);
 size_t deserialize_acc_logout(packet_acc_logout_t *packet, const uint8_t *bytes);
 size_t deserialize_acc_create(packet_acc_create_t *packet, const uint8_t *bytes);

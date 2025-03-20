@@ -60,7 +60,7 @@ const char *packet_error_str(uint8_t code)
     return NULL;
 }
 
-void print_header(const packet_header_t *header)
+void print_client_header(const packet_client_header_t *header)
 {
     if(header)
     {
@@ -73,11 +73,23 @@ void print_header(const packet_header_t *header)
     }
 }
 
+void print_sm_header(const packet_sm_header_t *header)
+{
+    if(header)
+    {
+        const char *name = packet_type_str(header->packet_type);
+
+        printf("Header Packet Type: %d (%s)\n", header->packet_type, name ? name : "Unknown");
+        printf("Header Version: %d\n", header->version);
+        printf("Header Payload Length: %d\n", header->payload_len);
+    }
+}
+
 void print_sys_success(const packet_sys_success_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Packet Type: %d\n", packet->packet_type);
     }
 }
@@ -86,7 +98,7 @@ void print_sys_error(const packet_sys_error_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Code: %d\n", packet->code);
         printf("Message: %s\n", packet->message);
     }
@@ -96,7 +108,7 @@ void print_acc_login_success(const packet_acc_login_success_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Id: %d\n", packet->id);
     }
 }
@@ -105,7 +117,7 @@ void print_acc_login(const packet_acc_login_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Username: %s\n", packet->username);
         printf("Password: %s\n", packet->password);
     }
@@ -115,7 +127,7 @@ void print_acc_logout(const packet_acc_logout_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
     }
 }
 
@@ -123,7 +135,7 @@ void print_acc_create(const packet_acc_create_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Username: %s\n", packet->username);
         printf("Password: %s\n", packet->password);
     }
@@ -133,7 +145,7 @@ void print_acc_edit(const packet_acc_edit_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Field: %d\n", packet->edit_field);
         printf("Value: %s\n", packet->edit_value);
     }
@@ -143,7 +155,7 @@ void print_cht_send(const packet_cht_send_t *packet)
 {
     if(packet)
     {
-        print_header(packet->header);
+        print_client_header(packet->header);
         printf("Timestamp: %s\n", packet->generalized_time);
         printf("Content: %s\n", packet->content);
         printf("Username: %s\n", packet->username);

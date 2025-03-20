@@ -6,7 +6,8 @@
 #include <stdint.h>
 #include <unistd.h>
 
-#define PACKET_HEADER_SIZE 6
+#define PACKET_CLIENT_HEADER_SIZE 6
+#define PACKET_SM_HEADER_SIZE 4
 #define SENDER_ID_DEFAULT 0
 
 typedef enum
@@ -31,7 +32,19 @@ typedef enum
     PACKET_CHT_SEND = 20,
     PACKET_LIST_GET = 30,
     PACKET_LIST_RESPONSE,
-} PACKET_TYPE;
+} SRV_PACKET_TYPE;
+
+typedef enum
+{
+    PACKET_MAN_SUCCESS = 0,
+    PACKET_MAN_ERROR,
+    PACKET_SVR_DIAGNOSTIC = 10,
+    PACKET_USR_ONLINE,
+    PACKET_SVR_ONLINE,
+    PACKET_SVR_OFFLINE,
+    PACKET_SVR_START = 20,
+    PACKET_SVR_STOP,
+} SM_PACKET_TYPE;
 
 typedef enum
 {
@@ -51,78 +64,86 @@ typedef struct
     uint8_t  version;
     uint16_t sender_id;
     uint16_t payload_len;
-} packet_header_t;
+} packet_client_header_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    void            *body;
+    uint8_t  packet_type;
+    uint8_t  version;
+    uint16_t payload_len;
+} packet_sm_header_t;
+
+typedef struct
+{
+    packet_client_header_t *header;
+    void                   *body;
 } packet_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    uint8_t          packet_type;
+    packet_client_header_t *header;
+    uint8_t                 packet_type;
 } packet_sys_success_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    uint8_t          code;
-    char            *message;
+    packet_client_header_t *header;
+    uint8_t                 code;
+    char                   *message;
 } packet_sys_error_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    char            *username;
-    char            *password;
+    packet_client_header_t *header;
+    char                   *username;
+    char                   *password;
 } packet_acc_login_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    uint16_t         id;
+    packet_client_header_t *header;
+    uint16_t                id;
 } packet_acc_login_success_t;
 
 typedef struct
 {
-    packet_header_t *header;
+    packet_client_header_t *header;
 } packet_acc_logout_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    char            *username;
-    char            *password;
+    packet_client_header_t *header;
+    char                   *username;
+    char                   *password;
 } packet_acc_create_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    uint8_t          edit_field;
-    char            *edit_value;
+    packet_client_header_t *header;
+    uint8_t                 edit_field;
+    char                   *edit_value;
 } packet_acc_edit_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    char            *generalized_time;
-    char            *content;
-    char            *username;
+    packet_client_header_t *header;
+    char                   *generalized_time;
+    char                   *content;
+    char                   *username;
 } packet_cht_send_t;
 
 typedef struct
 {
-    packet_header_t *header;
-    uint8_t          group_id;
-    uint8_t          filter;
+    packet_client_header_t *header;
+    uint8_t                 group_id;
+    uint8_t                 filter;
 } packet_lst_get_t;
 
 const char *packet_type_str(uint8_t type);
 const char *packet_error_str(uint8_t code);
 
-void print_header(const packet_header_t *header);
+void print_client_header(const packet_client_header_t *header);
+void print_sm_header(const packet_sm_header_t *header);
 void print_sys_success(const packet_sys_success_t *packet);
 void print_sys_error(const packet_sys_error_t *packet);
 void print_acc_login_success(const packet_acc_login_success_t *packet);

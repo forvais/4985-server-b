@@ -354,12 +354,12 @@ fsm_state_t header_handler(void *args)
 {
     request_t *request = (request_t *)args;
 
-    packet_header_t header;
-    size_t          header_size;
+    packet_client_header_t header;
+    size_t                 header_size;
 
     // Deserialize the packet header
-    header_size = deserialize_header(&header, request->content);
-    if(header_size != PACKET_HEADER_SIZE)
+    header_size = deserialize_client_header(&header, request->content);
+    if(header_size != PACKET_CLIENT_HEADER_SIZE)
     {
         return ERROR_HANDLER;
     }
