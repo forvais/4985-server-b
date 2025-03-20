@@ -17,13 +17,13 @@
 #include <unistd.h>
 
 #define TIMEOUT 3000    // 3s
-#define MSG_LEN 8
+
 int user_count = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
 int user_index = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
 
 static ssize_t execute_functions(request_t *request, const funcMapping functions[]);
 static void    count_user(const int *sessions);
-static void    send_user_count(int sm_fd, char *msg, int *err);
+static void    send_user_count(int sm_fd, int count, int *err);
 
 static const codeMapping code_map[] = {
     {OK,              ""                                  },
@@ -89,17 +89,25 @@ static void count_user(const int *sessions)
     printf("user_count: %d\n", user_count);
 }
 
-static void send_user_count(int sm_fd, char *msg, int *err)
+static void send_user_count(int sm_fd, int count, int *err)
 {
-    char *ptr;
+    packet_svr_diagnostic_t packet_svr_diagnostic;
 
-    ptr = msg;
-    // move 6 bytes
-    ptr += 1 + 1 + 2 + 1 + 1;
-    memcpy(ptr, (uint16_t *)&user_count, sizeof(uint16_t));
+    uint8_t *buf;
+    size_t   buf_size;
 
+    // Define packet svr_diagnostic parameters
+    packet_svr_diagnostic.header            = NULL;
+    packet_svr_diagnostic.message_count     = 0;
+    packet_svr_diagnostic.user_online_count = (uint16_t)count;    // WARNING: UNSAFE CAST -- user_count could be way bigger than a uint16_t (65536) could handle...
+                                                                  // Unlikely but should be aware.
+
+    // Serialize the packet
+    buf_size = serialize_svr_diagnostic(&buf, &packet_svr_diagnostic, err);
+
+    // Write to buffer to the server manager
     printf("send_user_count\n");
-    if(write_fully(sm_fd, msg, sizeof(msg), err) < 0)
+    if(write_fully(sm_fd, (char *)buf, (ssize_t)buf_size, err) < 0)
     {
         perror("send_user_count failed");
         errno = 0;
@@ -129,15 +137,12 @@ void event_loop(int server_fd, int sm_fd, int *err)
 {
     struct pollfd fds[MAX_FDS];
     // user_ids
-    int      sessions[MAX_FDS];
-    int      client_fd;
-    int      added;
-    char     db_name[] = "meta_user";
-    DBO      meta_userDB;
-    ssize_t  result;
-    char     msg[MSG_LEN];
-    char    *ptr;
-    uint16_t msg_len = htons(0x0004);
+    int     sessions[MAX_FDS];
+    int     client_fd;
+    int     added;
+    char    db_name[] = "meta_user";
+    DBO     meta_userDB;
+    ssize_t result;
 
     meta_userDB.name = db_name;
 
@@ -152,15 +157,6 @@ void event_loop(int server_fd, int sm_fd, int *err)
         perror("database error");
         goto cleanup;
     }
-
-    ptr    = msg;
-    *ptr++ = USR_Count;
-    *ptr++ = ONE;
-    memcpy(ptr, &msg_len, sizeof(msg_len));
-    ptr += sizeof(msg_len);
-    *ptr++ = INTEGER;
-    *ptr++ = sizeof(uint16_t);
-    memcpy(ptr, (uint16_t *)&user_count, sizeof(uint16_t));
 
     fds[0].fd     = server_fd;
     fds[0].events = POLLIN;
@@ -196,7 +192,7 @@ void event_loop(int server_fd, int sm_fd, int *err)
                 goto cleanup;
             }
             count_user(sessions);
-            send_user_count(sm_fd, msg, err);
+            send_user_count(sm_fd, user_count, err);
             continue;
         }
 
