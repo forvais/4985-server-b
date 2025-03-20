@@ -4,6 +4,8 @@
 #define DATABASE_H
 
 #include <ndbm.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 #ifdef __APPLE__
@@ -47,5 +49,11 @@ int retrieve_int(DBM *db, const char *key, int *result);
 void *retrieve_byte(DBM *db, const void *key, size_t size);
 
 ssize_t init_pk(DBO *dbo, const char *pk_name);
+
+int      db_user_insert(DBM *db, const char *username, const char *password);
+int      db_user_add_id(DBM *db, const char *username);
+uint8_t *db_user_fetch_password(DBM *db, const char *username);
+int      db_user_fetch_id(DBM *db, const char *username);
+bool     db_user_exists(DBM *db, const char *username);
 
 #endif    // DATABASE_H

@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -152,4 +153,73 @@ ssize_t init_pk(DBO *dbo, const char *pk_name)
 
     dbm_close(dbo->db);
     return 0;
+}
+
+int db_user_insert(DBM *db, const char *username, const char *password)
+{
+    size_t user_len;
+    size_t pass_len;
+
+    // Determine string sizes
+    user_len = strlen(username);
+    pass_len = strlen(password);
+
+    // Store the user
+    if(store_byte(db, username, user_len, password, pass_len) != 0)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+int db_user_add_id(DBM *db, const char *username)
+{
+    if(store_int(db, username, user_index) < 0)
+    {
+        return -1;
+    }
+
+    return user_index++;
+}
+
+int db_user_fetch_id(DBM *db, const char *username)
+{
+    // NOTE: Intentional packet user_id and return-type mismatch due to the missing granularity in the retrieve_* funcs...
+    int user_id;
+
+    if(retrieve_int(db, username, &user_id) < 0)
+    {
+        return -1;
+    }
+
+    return user_id;
+}
+
+uint8_t *db_user_fetch_password(DBM *db, const char *username)
+{
+    void *password;
+
+    password = retrieve_byte(db, username, strlen(username));
+    if(!password)
+    {
+        return NULL;
+    }
+
+    return password;
+}
+
+bool db_user_exists(DBM *db, const char *username)
+{
+    void *password;
+
+    password = retrieve_byte(db, username, strlen(username));
+    if(password)
+    {
+        free(password);
+        return true;
+    }
+
+    free(password);
+    return false;
 }
