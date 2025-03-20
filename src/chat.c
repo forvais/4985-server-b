@@ -1,5 +1,6 @@
 #include "chat.h"
 #include "io.h"
+#include "packets.h"
 #include <arpa/inet.h>
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_stdlib.h>
