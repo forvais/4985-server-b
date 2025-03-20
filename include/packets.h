@@ -139,6 +139,13 @@ typedef struct
     uint8_t                 filter;
 } packet_lst_get_t;
 
+typedef struct
+{
+    packet_sm_header_t *header;
+    uint16_t            user_online_count;
+    uint32_t            message_count;
+} packet_svr_diagnostic_t;
+
 const char *packet_type_str(uint8_t type);
 const char *packet_error_str(uint8_t code);
 
@@ -152,6 +159,7 @@ void print_acc_logout(const packet_acc_logout_t *packet);
 void print_acc_create(const packet_acc_create_t *packet);
 void print_acc_edit(const packet_acc_edit_t *packet);
 void print_cht_send(const packet_cht_send_t *packet);
+void print_svr_diagnostic(const packet_svr_diagnostic_t *packet);
 
 void clean_sys_success(packet_sys_success_t *packet);
 void clean_sys_error(packet_sys_error_t *packet);
@@ -161,5 +169,6 @@ void clean_acc_login(packet_acc_login_t *packet);
 void clean_acc_logout(packet_acc_logout_t *packet);
 void clean_acc_edit(packet_acc_edit_t *packet);
 void clean_cht_send(packet_cht_send_t *packet);
+void clean_svr_diagnostic(packet_svr_diagnostic_t *packet);
 
 #endif

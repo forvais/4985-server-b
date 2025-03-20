@@ -162,6 +162,16 @@ void print_cht_send(const packet_cht_send_t *packet)
     }
 }
 
+void print_svr_diagnostic(const packet_svr_diagnostic_t *packet)
+{
+    if(packet)
+    {
+        print_sm_header(packet->header);
+        printf("User Online Count: %d\n", packet->user_online_count);
+        printf("Message Count: %d\n", packet->message_count);
+    }
+}
+
 void clean_sys_success(packet_sys_success_t *packet)
 {
     free(packet->header);
@@ -209,4 +219,9 @@ void clean_cht_send(packet_cht_send_t *packet)
     free(packet->generalized_time);
     free(packet->content);
     free(packet->username);
+}
+
+void clean_svr_diagnostic(packet_svr_diagnostic_t *packet)
+{
+    free(packet->header);
 }

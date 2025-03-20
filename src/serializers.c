@@ -182,6 +182,52 @@ size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_succe
     return offset;
 }
 
+size_t serialize_svr_diagnostic(uint8_t **bytes, const packet_svr_diagnostic_t *packet, int *err)
+{
+    packet_sm_header_t header;
+
+    // Define sizes of members
+    const size_t size_user_online_count = sizeof(packet->user_online_count);
+    const size_t size_message_count     = sizeof(packet->message_count);
+    const size_t payload_len            = (BER_SIZE + size_user_online_count) + (BER_SIZE + size_message_count);
+
+    size_t offset = 0;
+
+    // Define header parameters
+    memset(&header, 0, sizeof(packet_sm_header_t));
+    header.packet_type = PACKET_SVR_DIAGNOSTIC;
+    header.version     = 1;
+    header.payload_len = (uint16_t)payload_len;
+
+    // Allocate space for the serialized header and data
+    errno  = 0;
+    *bytes = (uint8_t *)calloc(PACKET_SM_HEADER_SIZE + payload_len, sizeof(uint8_t));
+    if(*bytes == NULL)
+    {
+        *err = errno;
+        return 0;
+    }
+
+    // Serialize the header
+    offset += serialize_sm_header(bytes, &header);
+    if(offset == 0)
+    {
+        return 0;
+    }
+
+    // Serialize the payload
+    ber_sign_integer(*bytes, &offset, size_user_online_count);
+    serialize_2_bytes(*bytes, &offset, packet->user_online_count);
+
+    ber_sign_integer(*bytes, &offset, size_message_count);
+    serialize_4_bytes(*bytes, &offset, packet->message_count);
+
+    // Check that sizes are as expected
+    assert_packet_size("packet_svr_diagnostic", PACKET_SM_HEADER_SIZE + payload_len, offset);
+
+    return offset;
+}
+
 // Deserialization
 size_t deserialize_client_header(packet_client_header_t *header, const uint8_t *bytes)
 {

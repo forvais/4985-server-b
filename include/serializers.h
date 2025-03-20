@@ -9,6 +9,7 @@ size_t serialize_sm_header(uint8_t **bytes, const packet_sm_header_t *header);
 size_t serialize_sys_success(uint8_t **bytes, const packet_sys_success_t *packet, int *err);
 size_t serialize_sys_error(uint8_t **bytes, const packet_sys_error_t *packet, int *err);
 size_t serialize_acc_login_success(uint8_t **bytes, const packet_acc_login_success_t *packet, int *err);
+size_t serialize_svr_diagnostic(uint8_t **bytes, const packet_svr_diagnostic_t *packet, int *err);
 
 size_t deserialize_client_header(packet_client_header_t *header, const uint8_t *bytes);
 size_t deserialize_sm_header(packet_sm_header_t *header, const uint8_t *bytes);
