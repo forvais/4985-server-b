@@ -168,7 +168,7 @@ void print_svr_diagnostic(const packet_svr_diagnostic_t *packet)
     {
         print_sm_header(packet->header);
         printf("User Online Count: %d\n", packet->user_online_count);
-        printf("Message Count: %d\n", packet->message_count);
+        printf("Message Count: %ud\n", packet->message_count);
     }
 }
 
