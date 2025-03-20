@@ -13,7 +13,7 @@ const funcMapping chat_func[] = {
 ssize_t chat_broadcast(request_t *request)
 {
     // Broadcast the msg to all users
-    request->response_len = (uint16_t)request->len + HEADER_SIZE;
+    request->response_len = (uint16_t)request->len + PACKET_CLIENT_HEADER_SIZE;
     memcpy(request->response, request->content, request->response_len);    // The message out is the same as message in, copy the contents to the response
 
     // Iterate through all saved FDs and broadcast

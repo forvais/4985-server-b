@@ -257,10 +257,10 @@ void event_loop(int server_fd, int sm_fd, int *err)
                     request.client = &fds[i];
                     // user_id
                     request.session_id   = &sessions[i];
-                    request.len          = HEADER_SIZE;
+                    request.len          = PACKET_CLIENT_HEADER_SIZE;
                     request.response_len = 3;
                     request.fds          = fds;
-                    request.content      = malloc(HEADER_SIZE);
+                    request.content      = malloc(PACKET_CLIENT_HEADER_SIZE);
                     if(request.content == NULL)
                     {
                         perror("Malloc failed to allocate memory\n");
@@ -380,7 +380,7 @@ fsm_state_t body_handler(void *args)
     ssize_t  nread;
 
     // Expand the request->content buffer to fit the the rest of the body
-    buf = (uint8_t *)realloc(request->content, request->len + HEADER_SIZE);
+    buf = (uint8_t *)realloc(request->content, request->len + PACKET_CLIENT_HEADER_SIZE);
     if(buf == NULL)
     {
         return ERROR_HANDLER;
@@ -389,7 +389,7 @@ fsm_state_t body_handler(void *args)
 
     // Read the rest of the packet
     request->err = 0;
-    nread        = read_fully(request->client->fd, (char *)request->content + HEADER_SIZE, request->len, &request->err);
+    nread        = read_fully(request->client->fd, (char *)request->content + PACKET_CLIENT_HEADER_SIZE, request->len, &request->err);
     if(nread < 0)
     {
         return ERROR_HANDLER;
@@ -447,7 +447,7 @@ fsm_state_t error_handler(void *args)
     if(request->type != ACC_Logout)
     {
         error_response(request);
-        request->response_len = (uint16_t)(HEADER_SIZE + ntohs(request->response_len));
+        request->response_len = (uint16_t)(PACKET_CLIENT_HEADER_SIZE + ntohs(request->response_len));
     }
     printf("response_len: %d\n", (request->response_len));
 
