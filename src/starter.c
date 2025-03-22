@@ -106,58 +106,34 @@ fsm_state_t wait_for_start(void *args)
     return CLEANUP_HANDLER;
 }
 
+extern char **environ;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
+
 fsm_state_t parse_envp(void *args)
 {
-    args_t *sm_args = (args_t *)args;
-    char    buf[BUF_SIZE];
-    int     index;
+    const args_t *sm_args = (args_t *)args;
+    char          buf[BUF_SIZE];
+    char        **env = environ;
 
-    // Anonymous struct + inline initialization
-    struct
+    setenv("ADDR", sm_args->addr, 1);
+
+    snprintf(buf, BUF_SIZE, "%u", sm_args->port);
+    setenv("PORT", buf, 1);
+    memset(buf, 0, BUF_SIZE);
+
+    setenv("SM_ADDR", sm_args->sm_addr, 1);
+
+    snprintf(buf, BUF_SIZE, "%u", sm_args->sm_port);
+    setenv("SM_PORT", buf, 1);
+    memset(buf, 0, BUF_SIZE);
+
+    snprintf(buf, BUF_SIZE, "%d", *sm_args->sm_fd);
+    setenv("SM_FD", buf, 1);
+    memset(buf, 0, BUF_SIZE);
+
+    while(*env)
     {
-        const char *key;
-        const void *value;
-        int         is_string;    // 1 for string, 0 for integer
-    } const env_vars[] = {
-        {"ADDR=",    sm_args->addr,     1},
-        {"PORT=",    &sm_args->port,    0},
-        {"SM_ADDR=", sm_args->sm_addr,  1},
-        {"SM_PORT=", &sm_args->sm_port, 0},
-        {"SM_FD=",   sm_args->sm_fd,    2},
-        {NULL,       NULL,              0}  // End marker
-    };
-
-    index = 0;
-
-    for(int i = 0; env_vars[i].key != NULL; i++)
-    {
-        if(env_vars[i].is_string == 1)
-        {
-            snprintf(buf, BUF_SIZE, "%s%s", env_vars[i].key, (const char *)env_vars[i].value);
-        }
-        else if(env_vars[i].is_string == 2)
-        {
-            snprintf(buf, BUF_SIZE, "%s%d", env_vars[i].key, *(const int *)env_vars[i].value);
-        }
-        else
-        {
-            snprintf(buf, BUF_SIZE, "%s%u", env_vars[i].key, *(const in_port_t *)env_vars[i].value);
-        }
-
-        sm_args->envp[index] = strdup(buf);
-        if(sm_args->envp[index] == NULL)
-        {
-            perror("strdup failed");
-            return CLEANUP_HANDLER;
-        }
-        memset(buf, 0, BUF_SIZE);
-        index++;
-    }
-    sm_args->envp[index] = NULL;
-
-    for(int i = 0; sm_args->envp[i] != NULL; i++)
-    {
-        printf("%s\n", sm_args->envp[i]);
+        printf("%s\n", *env);
+        env++;
     }
 
     return WAIT_FOR_START;
@@ -183,7 +159,7 @@ fsm_state_t launch_server(void *args)
 
     if(pid == 0)
     {
-        execve("./build/server", NULL, sm_args->envp);
+        execv("./build/server", NULL);
 
         // _exit if fails
         perror("execv failed");
@@ -250,11 +226,6 @@ fsm_state_t cleanup_handler(void *args)
     const args_t *sm_args = (args_t *)args;
 
     close(*sm_args->sm_fd);
-    for(int i = 0; i < ARGC; i++)
-    {
-        free(sm_args->envp[i]);
-    }
-
     return END;
 }
 
@@ -292,10 +263,6 @@ int main(int argc, char *argv[])
         {
             printf("illegal state %d, %d \n", from_id, to_id);
             close(sm_fd);
-            for(int i = 0; i < ARGC; i++)
-            {
-                free(args.envp[i]);
-            }
             break;
         }
         // printf("from_id %d\n", from_id);
