@@ -55,6 +55,22 @@ ssize_t account_create(request_t *request)
     // Deserialize the packet
     deserialize_acc_create(&packet_acc_create, request->content);
 
+    // Check for an existing user
+    if(db_user_exists(userDB.db, packet_acc_create.username))
+    {
+        perror("db_user_exists");
+        request->code = USER_EXISTS;
+        goto error;
+    }
+
+    // Store credentials
+    if(db_user_insert(userDB.db, packet_acc_create.username, packet_acc_create.password) != 0)
+    {
+        perror("db_user_insert");
+        request->code = SERVER_ERRER;
+        goto error;
+    }
+
     // Store user index
     user_id = db_user_add_id(index_userDB.db, packet_acc_create.username);
     if(user_id < 0)
