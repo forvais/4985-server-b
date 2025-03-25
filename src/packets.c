@@ -10,7 +10,7 @@ typedef struct
 
 typedef struct
 {
-    ERR         code;
+    SRV_ERR_T   code;
     const char *msg;
 } packet_error_t;
 

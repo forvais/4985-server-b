@@ -18,7 +18,7 @@ typedef enum
     ERR_SERVER_FAULT   = 21,
     ERR_PACKET_INVALID = 31,
     ERR_PACKET_REQUEST_TIMEOUT,
-} ERR;
+} SRV_ERR_T;
 
 typedef enum
 {

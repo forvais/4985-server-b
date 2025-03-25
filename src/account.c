@@ -17,7 +17,7 @@ const funcMapping acc_func[] = {
     {SYS_Success, NULL          }  // Null termination for safety
 };
 
-ssize_t account_create(request_t *request)
+ssize_t account_create(context_t *ctx)
 {
     packet_acc_create_t  packet_acc_create;
     packet_sys_success_t packet_sys_success;
@@ -29,45 +29,41 @@ ssize_t account_create(request_t *request)
 
     int user_id;
 
-    uint8_t *response_buf;
-
     userDB.name       = user_name;
     userDB.db         = NULL;
     index_userDB.name = index_name;
     index_userDB.db   = NULL;
 
-    printf("in account_create %d \n", request->client->fd);
+    printf("in account_create %d \n", ctx->client_fd);
 
-    if(database_open(&userDB, &request->err) < 0)
+    if(database_open(&userDB, &ctx->err) < 0)
     {
         perror("database error");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
-    if(database_open(&index_userDB, &request->err) < 0)
+    if(database_open(&index_userDB, &ctx->err) < 0)
     {
         perror("database error");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
     // Deserialize the packet
-    deserialize_acc_create(&packet_acc_create, request->content);
+    deserialize_acc_create(&packet_acc_create, ctx->in_bytes);
 
-    // Check for an existing user
     if(db_user_exists(userDB.db, packet_acc_create.username))
     {
-        perror("db_user_exists");
-        request->code = USER_EXISTS;
+        ctx->code = ERR_CLIENT_USER_EXISTS;
         goto error;
     }
 
     // Store credentials
     if(db_user_insert(userDB.db, packet_acc_create.username, packet_acc_create.password) != 0)
     {
-        perror("db_user_insert");
-        request->code = SERVER_ERRER;
+        perror("db_user_add_id");
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
@@ -76,24 +72,15 @@ ssize_t account_create(request_t *request)
     if(user_id < 0)
     {
         perror("db_user_add_id");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
-    *request->session_id = user_id;
+    ctx->user_id = user_id;
 
     // Create and serialize response
     packet_sys_success.header      = NULL;
     packet_sys_success.packet_type = ACC_Create;
-    request->response_len          = (uint16_t)serialize_sys_success(&response_buf, &packet_sys_success, &request->err);
-
-    // ... Copy response buf to request->response -- required to copy data from dynamic buffer to a static buffer
-    errno = 0;
-    if(memcpyds(request->response, response_buf, sizeof(request->response), request->response_len) == 0)
-    {
-        perror("memcpyds");
-        request->code = SERVER_ERROR;
-        goto error;
-    }
+    ctx->out_header.payload_len    = (uint16_t)serialize_sys_success(&ctx->out_bytes, &packet_sys_success, &ctx->err) - PACKET_CLIENT_HEADER_SIZE;
 
     dbm_close(userDB.db);
     dbm_close(index_userDB.db);
@@ -105,7 +92,7 @@ error:
     return -1;
 }
 
-ssize_t account_login(request_t *request)
+ssize_t account_login(context_t *ctx)
 {
     packet_acc_login_t         packet_acc_login;
     packet_acc_login_success_t packet_acc_login_success;
@@ -118,36 +105,34 @@ ssize_t account_login(request_t *request)
     uint8_t *password;
     int      user_id;
 
-    uint8_t *response_buf;
-
     userDB.name       = user_name;
     userDB.db         = NULL;
     index_userDB.name = index_name;
     index_userDB.db   = NULL;
 
-    printf("in account_login %d \n", request->client->fd);
+    printf("in account_login %d \n", ctx->client_fd);
 
-    if(database_open(&userDB, &request->err) < 0)
+    if(database_open(&userDB, &ctx->err) < 0)
     {
         perror("database error");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
-    if(database_open(&index_userDB, &request->err) < 0)
+    if(database_open(&index_userDB, &ctx->err) < 0)
     {
         perror("database error");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
     // Deserialize the packet
-    deserialize_acc_login(&packet_acc_login, request->content);
+    deserialize_acc_login(&packet_acc_login, ctx->in_bytes);
 
     // Check if the user exists
     if(!db_user_exists(userDB.db, packet_acc_login.username))
     {    // ...if it does not...
-        request->code = INVALID_AUTH;
+        ctx->code = ERR_CLIENT_INVALID_AUTH_INFO;
         goto error;
     }
 
@@ -155,7 +140,7 @@ ssize_t account_login(request_t *request)
     password = db_user_fetch_password(userDB.db, packet_acc_login.username);
     if(password == NULL)
     {
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
@@ -163,7 +148,7 @@ ssize_t account_login(request_t *request)
     if(memcmp(password, packet_acc_login.password, strlen(packet_acc_login.password)) != 0)    // BUG: Lots of potentional for memory security issues here
     {
         free(password);
-        request->code = INVALID_AUTH;
+        ctx->code = ERR_CLIENT_INVALID_AUTH_INFO;
         goto error;
     }
 
@@ -174,14 +159,14 @@ ssize_t account_login(request_t *request)
     {
         // user_id is unexpectedly way too big...
         fprintf(stderr, "db_user_fetch_id: User ID is bigger than the UINT16_MAX.\n");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
     if(user_id < 0)    // Check lower limit
     {
         fprintf(stderr, "account login retrieve_int error\n");
-        request->code = SERVER_ERROR;
+        ctx->code = ERR_SERVER_FAULT;
         goto error;
     }
 
@@ -190,16 +175,7 @@ ssize_t account_login(request_t *request)
     // Create and serialize response
     packet_acc_login_success.header = NULL;
     packet_acc_login_success.id     = (uint16_t)user_id;
-    request->response_len           = (uint16_t)serialize_acc_login_success(&response_buf, &packet_acc_login_success, &request->err);
-
-    // ... Copy response buf to request->response -- required to copy data from dynamic buffer to a static buffer
-    errno = 0;
-    if(memcpyds(request->response, response_buf, sizeof(request->response), request->response_len) == 0)
-    {
-        perror("memcpyds");
-        request->code = SERVER_ERROR;
-        goto error;
-    }
+    ctx->out_header.payload_len     = (uint16_t)serialize_acc_login_success(&ctx->out_bytes, &packet_acc_login_success, &ctx->err) - PACKET_CLIENT_HEADER_SIZE;
 
     dbm_close(userDB.db);
     dbm_close(index_userDB.db);
@@ -212,12 +188,12 @@ error:
     return -1;
 }
 
-ssize_t account_logout(request_t *request)
+ssize_t account_logout(context_t *ctx)
 {
-    printf("in account_logout %d \n", request->client->fd);
+    printf("in account_logout %d \n", ctx->client_fd);
 
-    request->response_len = 0;
-    request->err          = 0;
+    free(ctx->out_bytes);
+    ctx->out_bytes = NULL;
 
     return -1;
 }

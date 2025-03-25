@@ -11,21 +11,24 @@ const funcMapping chat_func[] = {
     {SYS_Success, NULL          }  // Null termination for safety
 };
 
-ssize_t chat_broadcast(request_t *request)
+ssize_t chat_broadcast(context_t *ctx)
 {
-    // Broadcast the msg to all users
-    request->response_len = (uint16_t)request->len + PACKET_CLIENT_HEADER_SIZE;
-    memcpy(request->response, request->content, request->response_len);    // The message out is the same as message in, copy the contents to the response
-
-    // Iterate through all saved FDs and broadcast
-    for(int i = 1; i < MAX_FDS; i++)
+    // Iterate through all saved FDs...
+    for(size_t idx = 1; idx < ctx->state->max_clients; idx++)
     {
-        if(request->fds[i].fd != -1)
+        const int indexed_fd = ctx->state->pollfds[idx].fd;
+
+        // ... Except for invalid clients and the sender client ...
+        if(indexed_fd != -1 && indexed_fd != ctx->client_fd)
         {
-            printf("broadcasting... %d\n", request->fds[i].fd);
-            write_fully(request->fds[i].fd, request->response, (ssize_t)request->response_len, &request->err);
+            // ... Broadcast
+            write_fully(indexed_fd, ctx->in_bytes, PACKET_CLIENT_HEADER_SIZE + ctx->in_header.payload_len, &ctx->err);
         }
     }
+
+    // Indicate that no response should be sent
+    free(ctx->out_bytes);
+    ctx->out_bytes = NULL;
 
     return 0;
 }

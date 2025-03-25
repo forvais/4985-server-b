@@ -5,6 +5,7 @@
 #include "io.h"
 #include "packets.h"
 #include "serializers.h"
+#include "state.h"
 #include "utils.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -16,14 +17,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TIMEOUT 3000    // 3s
-
 int user_count = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
 int user_index = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
 
-static ssize_t execute_functions(request_t *request, const funcMapping functions[]);
-static void    count_user(const int *sessions);
-static void    send_user_count(int sm_fd, int count, int *err);
+static ssize_t execute_functions(context_t *ctx, const funcMapping functions[]);
+static void    send_user_count(int fd, size_t count, int *err);
 
 static const codeMapping code_map[] = {
     {OK,              ""                                  },
@@ -61,35 +59,20 @@ static const struct fsm_transition transitions[] = {
     {ERROR_HANDLER,    END,              NULL            },
 };
 
-static ssize_t execute_functions(request_t *request, const funcMapping functions[])
+static ssize_t execute_functions(context_t *ctx, const funcMapping functions[])
 {
     for(size_t i = 0; functions[i].type != SYS_Success; i++)
     {
-        if(request->type == functions[i].type)
+        if(ctx->in_header.packet_type == functions[i].type)
         {
-            return functions[i].func(request);
+            return functions[i].func(ctx);
         }
     }
-    printf("Not builtin command: %d\n", *(uint8_t *)request->content);
+    fprintf(stderr, "Unknown packet type: %d\n", ctx->in_header.packet_type);
     return 1;
 }
 
-static void count_user(const int *sessions)
-{
-    // printf("user_index: %d\n", user_index);
-    user_count = 0;
-    for(int i = 1; i < MAX_FDS; i++)
-    {
-        printf("user id: %d\n", sessions[i]);
-        if(sessions[i] != -1)
-        {
-            user_count++;
-        }
-    }
-    printf("user_count: %d\n", user_count);
-}
-
-static void send_user_count(int sm_fd, int count, int *err)
+static void send_user_count(int fd, size_t count, int *err)
 {
     packet_svr_diagnostic_t packet_svr_diagnostic;
 
@@ -107,7 +90,7 @@ static void send_user_count(int sm_fd, int count, int *err)
 
     // Write to buffer to the server manager
     printf("send_user_count\n");
-    if(write_fully(sm_fd, (char *)buf, (ssize_t)buf_size, err) < 0)
+    if(write_fully(fd, (char *)buf, (ssize_t)buf_size, err) < 0)
     {
         perror("send_user_count failed");
         errno = 0;
@@ -116,35 +99,23 @@ static void send_user_count(int sm_fd, int count, int *err)
     free(buf);
 }
 
-void error_response(request_t *request)
+void error_response(context_t *ctx)
 {
     packet_sys_error_t packet_error;
 
-    uint8_t *buf;
-    size_t   buf_size;
-
     // Define packet_sys_error parameters
     packet_error.header = NULL;
-    packet_error.code   = (uint8_t)request->code;
+    packet_error.code   = (uint8_t)ctx->code;
     strhcpy(&packet_error.message, packet_error_str(packet_error.code));    // packet_error_str returns const char *, which packet_error.msg doesn't like... Use strhcpy to copy to heap.
 
     // Serialize the packet
-    buf_size = serialize_sys_error(&buf, &packet_error, &request->err);
-
-    // Copy to request.response
-    memcpyds(&request->response, buf, sizeof(request->response), buf_size);    // Use memcpyds to copy dynamically allocated memory into static memory
+    ctx->out_header.payload_len = (uint16_t)serialize_sys_error(&ctx->out_bytes, &packet_error, &ctx->err) - PACKET_CLIENT_HEADER_SIZE;
 }
 
-void event_loop(int server_fd, int sm_fd, int *err)
+void event_loop(app_state_t *state, int timeout, int *err)
 {
-    struct pollfd fds[MAX_FDS];
-    // user_ids
-    int     sessions[MAX_FDS];
-    int     client_fd;
-    int     added;
-    char    db_name[] = "meta_user";
-    DBO     meta_userDB;
-    ssize_t result;
+    char db_name[] = "meta_user";
+    DBO  meta_userDB;
 
     meta_userDB.name = db_name;
 
@@ -160,21 +131,16 @@ void event_loop(int server_fd, int sm_fd, int *err)
         goto cleanup;
     }
 
-    fds[0].fd     = server_fd;
-    fds[0].events = POLLIN;
-    for(int i = 1; i < MAX_FDS; i++)
-    {
-        fds[i].fd   = -1;
-        sessions[i] = -1;
-    }
-
     while(running)
     {
+        const struct pollfd *server_pollfd = &state->pollfds[0];
+        ssize_t              poll_result;
+
         errno = 0;
-        printf("polling...\n");
-        result = poll(fds, MAX_FDS, TIMEOUT);
-        // printf("result %d\n", (int)result);
-        if(result == -1)
+
+        // Setup polling
+        poll_result = poll(state->pollfds, state->max_clients, timeout);
+        if(poll_result == -1)
         {
             if(errno == EINTR)
             {
@@ -183,7 +149,7 @@ void event_loop(int server_fd, int sm_fd, int *err)
             perror("Poll error");
             goto cleanup;
         }
-        if(result == 0)
+        if(poll_result == 0)    // On POLL timeout...
         {
             printf("syncing meta_user...\n");
 
@@ -193,121 +159,90 @@ void event_loop(int server_fd, int sm_fd, int *err)
                 perror("update user_index");
                 goto cleanup;
             }
-            count_user(sessions);
-            send_user_count(sm_fd, user_count, err);
+
+            // Send user count to server manager
+            send_user_count(state->smfd, state->connected_clients, err);
             continue;
         }
 
-        // Check for new connection
-        if(fds[0].revents & POLLIN)
+        // Handle new connections
+        if(server_pollfd->revents & POLLIN)
         {
-            client_fd = accept(server_fd, NULL, 0);
-            if(client_fd < 0)
+            int connfd;
+
+            // Accept new connections
+            errno  = 0;
+            connfd = accept(server_pollfd->fd, NULL, 0);
+            if(connfd < 0)
             {
-                if(errno == EINTR)
+                if(errno != EINTR)
                 {
-                    goto cleanup;
+                    perror("Accept failed");
                 }
-                perror("Accept failed");
+
                 continue;
             }
 
             // Add new client to poll list
-            added = 0;
-            for(int i = 1; i < MAX_FDS; i++)
-            {
-                if(fds[i].fd == -1)
-                {
-                    fds[i].fd     = client_fd;
-                    fds[i].events = POLLIN;
-                    added         = 1;
-                    break;
-                }
-            }
-            if(!added)
-            {
-                char too_many[] = "Too many clients, rejecting connection\n";
-
-                printf("%s", too_many);
-                write_fully(client_fd, &too_many, (ssize_t)strlen(too_many), err);
-
-                close(client_fd);
-                continue;
-            }
+            app_state_register_client(state, connfd);
         }
 
         // Check existing clients for data
-        for(int i = 1; i < MAX_FDS; i++)
+        for(size_t i = 1; i < state->max_clients; i++)
         {
-            if(fds[i].fd != -1)
+            session_t           *client_session = &state->sessions[i];
+            const struct pollfd *client_pollfd  = client_session->pollfd;
+
+            if(client_session->id == -1)
             {
-                if(fds[i].revents & POLLIN)
+                continue;
+            }
+
+            if(client_pollfd->revents & POLLIN)    // If a [valid] client has incoming data...
+            {
+                context_t ctx;
+
+                fsm_state_func perform;
+                fsm_state_t    from_id;
+                fsm_state_t    to_id;
+
+                // Create pipeline context
+                ctx_init(&ctx, state, client_session);
+                printf("event_loop session_id %d\n", client_session->id);
+
+                // Set FSM parameters
+                from_id = START;
+                to_id   = REQUEST_HANDLER;
+
+                // Execute FSM pipeline
+                do
                 {
-                    request_t      request;
-                    fsm_state_func perform;
-                    fsm_state_t    from_id;
-                    fsm_state_t    to_id;
-
-                    from_id = START;
-                    to_id   = REQUEST_HANDLER;
-
-                    request.err    = 0;
-                    request.client = &fds[i];
-                    // user_id
-                    request.session_id   = &sessions[i];
-                    request.len          = PACKET_CLIENT_HEADER_SIZE;
-                    request.response_len = 3;
-                    request.fds          = fds;
-                    request.content      = malloc(PACKET_CLIENT_HEADER_SIZE);
-                    if(request.content == NULL)
+                    perform = fsm_transition(from_id, to_id, transitions, sizeof(transitions));
+                    if(perform == NULL)
                     {
-                        perror("Malloc failed to allocate memory\n");
-                        close(fds[i].fd);
-                        fds[i].fd   = -1;
-                        sessions[i] = -1;
-                        continue;
+                        printf("illegal state %d, %d \n", from_id, to_id);
+                        app_state_remove_client_by_session(state, client_session);
+                        break;
                     }
 
-                    memset(request.response, 0, RESPONSE_SIZE);
+                    from_id = to_id;
+                    to_id   = perform(&ctx);
+                } while(to_id != END);
 
-                    request.code = OK;
+                ctx_destroy(&ctx);
+            }
 
-                    printf("event_loop session_id %d\n", *request.session_id);
-
-                    do
-                    {
-                        perform = fsm_transition(from_id, to_id, transitions, sizeof(transitions));
-                        if(perform == NULL)
-                        {
-                            printf("illegal state %d, %d \n", from_id, to_id);
-                            free(request.content);
-                            close(fds[i].fd);
-                            fds[i].fd     = -1;
-                            fds[i].events = 0;
-                            sessions[i]   = -1;
-                            break;
-                        }
-                        // printf("from_id %d\n", from_id);
-                        from_id = to_id;
-                        to_id   = perform(&request);
-                    } while(to_id != END);
-                }
-                if(fds[i].revents & (POLLHUP | POLLERR))
-                {
-                    // Client disconnected or error, close and clean up
-                    printf("oops...\n");
-                    close(fds[i].fd);
-                    fds[i].fd     = -1;
-                    fds[i].events = 0;
-                    sessions[i]   = -1;
-                    continue;
-                }
+            if(client_pollfd->revents & (POLLHUP | POLLERR))    //  If they have disconnected gracefully or from a fatal error...
+            {
+                // Client disconnected or error, close and clean up
+                printf("oops...\n");
+                app_state_remove_client_by_session(state, client_session);
             }
         }
     }
 
-    printf("syncing meta_user...\n");
     // update user index
+    printf("syncing meta_user...\n");
     if(store_int(meta_userDB.db, USER_PK, user_index) != 0)
     {
         perror("update user_index");
@@ -323,15 +258,26 @@ cleanup:
 
 fsm_state_t request_handler(void *args)
 {
-    request_t *request;
+    context_t *ctx;
     ssize_t    nread;
 
-    request = (request_t *)args;
-    printf("in request_handler %d\n", request->client->fd);
+    ctx = (context_t *)args;
 
-    // Read first 6 bytes from fd
+    printf("in request_handler %d\n", ctx->client_fd);
+
+    // Allocate enough bytes for a packet_client_header
+    errno         = 0;
+    ctx->in_bytes = (uint8_t *)calloc(PACKET_CLIENT_HEADER_SIZE, sizeof(uint8_t));
+    if(ctx->in_bytes == NULL)
+    {
+        ctx->err  = errno;
+        ctx->code = ERR_SERVER_FAULT;
+        return ERROR_HANDLER;
+    }
+
+    // Read [PACKET_CLIENT_HEADER_SIZE] bytes into ctx->in_bytes from the client buffer
     errno = 0;
-    nread = read_fully(request->client->fd, (char *)request->content, request->len, &request->err);
+    nread = read_fully(ctx->client_fd, (char *)ctx->in_bytes, PACKET_CLIENT_HEADER_SIZE, &ctx->err);
     printf("request_handler nread %d\n", (int)nread);
     if(nread < 0)
     {
@@ -339,9 +285,10 @@ fsm_state_t request_handler(void *args)
         return ERROR_HANDLER;
     }
 
-    if(nread < (ssize_t)request->len)
+    // If the amount read of bytes read is larger or smaller than the header size, the packet is invalid or corrupt
+    if(nread != PACKET_CLIENT_HEADER_SIZE)
     {
-        request->code = INVALID_REQUEST;
+        ctx->code = ERR_PACKET_INVALID;
         return ERROR_HANDLER;
     }
 
@@ -350,44 +297,50 @@ fsm_state_t request_handler(void *args)
 
 fsm_state_t header_handler(void *args)
 {
-    request_t *request = (request_t *)args;
+    context_t *ctx = (context_t *)args;
 
-    packet_client_header_t header;
-    size_t                 header_size;
+    size_t header_size;
 
-    // Deserialize the packet header
-    header_size = deserialize_client_header(&header, request->content);
+    printf("in header_handler %d\n", ctx->client_fd);
+
+    // Deserialize ctx->in_bytes and parse the bytes by copying them into a packet_client_header_t struct
+    header_size = deserialize_client_header(&ctx->in_header, ctx->in_bytes);
     if(header_size != PACKET_CLIENT_HEADER_SIZE)
-    {
+    {    // If the [deserialized] header size is smaller or larger than expected, something went wrong
+        ctx->code = ERR_SERVER_FAULT;
         return ERROR_HANDLER;
     }
 
-    // Adapt to existing data model
-    request->type      = header.packet_type;
-    request->sender_id = header.sender_id;
-    request->len       = header.payload_len;
+    printf("\nIncoming header:\n");
+    print_client_header(&ctx->in_header);
+    printf("\n");
 
     return BODY_HANDLER;
 }
 
 fsm_state_t body_handler(void *args)
 {
-    request_t *request = (request_t *)args;
+    context_t *ctx = (context_t *)args;
 
     uint8_t *buf;
     ssize_t  nread;
 
-    // Expand the request->content buffer to fit the the rest of the body
-    buf = (uint8_t *)realloc(request->content, request->len + PACKET_CLIENT_HEADER_SIZE);
+    printf("in body_handler %d\n", ctx->client_fd);
+
+    // Expand the request->in_bytes buffer to fit the the rest of the body
+    errno = 0;
+    buf   = (uint8_t *)realloc(ctx->in_bytes, PACKET_CLIENT_HEADER_SIZE + ctx->in_header.payload_len);
     if(buf == NULL)
     {
+        ctx->err  = errno;
+        ctx->code = ERR_SERVER_FAULT;
         return ERROR_HANDLER;
     }
-    request->content = buf;
+    ctx->in_bytes = buf;
 
-    // Read the rest of the packet
-    request->err = 0;
-    nread        = read_fully(request->client->fd, (char *)request->content + PACKET_CLIENT_HEADER_SIZE, request->len, &request->err);
+    // Read [packet_client_header_t->bytes] into ctx->bytes (offset by/after the header bytes)
+    ctx->err = 0;
+    nread    = read_fully(ctx->client_fd, (char *)ctx->in_bytes + PACKET_CLIENT_HEADER_SIZE, ctx->in_header.payload_len, &ctx->err);
     if(nread < 0)
     {
         return ERROR_HANDLER;
@@ -398,63 +351,69 @@ fsm_state_t body_handler(void *args)
 
 fsm_state_t process_handler(void *args)
 {
-    request_t *request;
+    context_t *ctx;
     ssize_t    result;
 
-    request = (request_t *)args;
+    ctx = (context_t *)args;
 
-    printf("in process_handler %d\n", request->client->fd);
+    printf("in process_handler %d\n", ctx->client_fd);
 
-    result = execute_functions(request, acc_func);
+    result = execute_functions(ctx, acc_func);
     if(result <= 0)
     {
         return (result < 0) ? ERROR_HANDLER : RESPONSE_HANDLER;
     }
 
-    result = execute_functions(request, chat_func);
+    result = execute_functions(ctx, chat_func);
     if(result <= 0)
     {
         return (result < 0) ? ERROR_HANDLER : RESPONSE_HANDLER;
     }
 
-    request->code = INVALID_REQUEST;
+    ctx->code = ERR_PACKET_INVALID;
     return ERROR_HANDLER;
 }
 
 fsm_state_t response_handler(void *args)
 {
-    request_t *request;
+    context_t *ctx;
 
-    request = (request_t *)args;
+    ctx = (context_t *)args;
 
-    printf("in response_handler %d\n", request->client->fd);
+    printf("in response_handler %d\n", ctx->client_fd);
 
-    write_fully(request->client->fd, request->response, request->response_len, &request->err);
+    // Exit early if there is no response to send
+    if(ctx->out_bytes == NULL)
+    {
+        return END;
+    }
 
-    free(request->content);
+    // Write response to client
+    if(write_fully(ctx->client_fd, ctx->out_bytes, PACKET_CLIENT_HEADER_SIZE + ctx->out_header.payload_len, &ctx->err) < 0)
+    {
+        printf("Wrote to closed fd.\n");
+    }
+
     return END;
 }
 
 fsm_state_t error_handler(void *args)
 {
-    request_t *request;
+    context_t *ctx;
 
-    request = (request_t *)args;
-    printf("in error_handler %d: %d\n", request->client->fd, (int)request->code);
+    packet_sys_error_t packet_error;
 
-    if(request->type != ACC_Logout)
+    ctx = (context_t *)args;
+    printf("in error_handler %d: %d\n", ctx->client_fd, (int)ctx->code);
+
+    if(ctx->in_header.packet_type != ACC_Logout)    // NOTE: Unsure when ACC_LOGOUT would ever have a chance to err.
     {
-        error_response(request);
-        request->response_len = (uint16_t)(PACKET_CLIENT_HEADER_SIZE + ntohs(request->response_len));
+        error_response(ctx);
     }
-    printf("response_len: %d\n", (request->response_len));
+    printf("response_len: %d\n", (PACKET_CLIENT_HEADER_SIZE + ctx->out_header.payload_len));
 
-    write_fully(request->client->fd, request->response, request->response_len, &request->err);
+    // Send err packet to client.
+    write_fully(ctx->client_fd, ctx->out_bytes, PACKET_CLIENT_HEADER_SIZE + ctx->out_header.payload_len, &ctx->err);
 
-    free(request->content);
-    close(request->client->fd);
-    request->client->fd     = -1;
-    request->client->events = 0;
-    *request->session_id    = -1;
     return END;
 }

@@ -4,40 +4,15 @@
 #define MESSAGING_H
 
 #include "fsm.h"
+#include "state.h"
 #include <poll.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <unistd.h>
 
-#define RESPONSE_SIZE 256
-#define SERVER_ID 0x0000
-#define MAX_CLIENTS 2
-#define MAX_FDS (MAX_CLIENTS + 1)
-
 extern int user_count;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
 extern int user_index;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables,-warnings-as-errors)
-
-typedef enum
-{
-    ONE   = 0x01,
-    TWO   = 0x02,
-    THREE = 0x03,
-} version_t;
-
-typedef enum
-{
-    BOOLEAN         = 0x01,
-    INTEGER         = 0x02,
-    null            = 0x05,
-    ENUMERATED      = 0x0A,
-    UTF8STRING      = 0x0C,
-    SEQUENCE        = 0x10,
-    SEQUENCEOF      = 0x30,
-    PrintableString = 0x13,
-    UTCTime         = 0x17,
-    GeneralizedTime = 0x18,
-} tag_t;
 
 typedef enum
 {
@@ -83,21 +58,6 @@ typedef enum
     LST_Response = 0x1F
 } type_t;
 
-typedef struct request_t
-{
-    void          *content;
-    size_t         len;
-    int            err;
-    struct pollfd *client;
-    int           *session_id;
-    uint16_t       sender_id;
-    uint8_t        type;
-    code_t         code;
-    uint8_t        response[RESPONSE_SIZE];
-    uint16_t       response_len;
-    struct pollfd *fds;
-} request_t;
-
 typedef struct codeMapping
 {
     code_t      code;
@@ -107,7 +67,7 @@ typedef struct codeMapping
 typedef struct funcMapping
 {
     type_t type;
-    ssize_t (*func)(request_t *request);
+    ssize_t (*func)(context_t *ctx);
 } funcMapping;
 
 typedef enum
@@ -117,20 +77,15 @@ typedef enum
 
 const char *code_to_string(const code_t *code);
 
-void error_response(request_t *request);
+void error_response(context_t *ctx);
 
-void event_loop(int server_fd, int sm_fd, int *err);
+void event_loop(app_state_t *state, int timeout, int *err);
 
 fsm_state_t request_handler(void *args);
-
 fsm_state_t header_handler(void *args);
-
 fsm_state_t body_handler(void *args);
-
 fsm_state_t process_handler(void *args);
-
 fsm_state_t response_handler(void *args);
-
 fsm_state_t error_handler(void *args);
 
 #endif
