@@ -112,6 +112,8 @@ static void send_user_count(int sm_fd, int count, int *err)
         perror("send_user_count failed");
         errno = 0;
     }
+
+    free(buf);
 }
 
 void error_response(request_t *request)
