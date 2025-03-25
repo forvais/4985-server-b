@@ -23,6 +23,10 @@ int user_index = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variab
 static ssize_t execute_functions(context_t *ctx, const funcMapping functions[]);
 static void    send_user_count(int fd, size_t count, int *err);
 
+static int handle_server_incoming_connections(app_state_t *state, int fd);
+static int handle_client_data_in(app_state_t *state, session_t *session);
+static int handle_client_disconnect(app_state_t *state, session_t *session);
+
 static const codeMapping code_map[] = {
     {OK,              ""                                  },
     {INVALID_USER_ID, "Invalid User ID"                   },
@@ -99,17 +103,72 @@ static void send_user_count(int fd, size_t count, int *err)
     free(buf);
 }
 
-void error_response(context_t *ctx)
+static int handle_server_incoming_connections(app_state_t *state, int sockfd)
 {
-    packet_sys_error_t packet_error;
+    int connfd;
 
-    // Define packet_sys_error parameters
-    packet_error.header = NULL;
-    packet_error.code   = (uint8_t)ctx->code;
-    strhcpy(&packet_error.message, packet_error_str(packet_error.code));    // packet_error_str returns const char *, which packet_error.msg doesn't like... Use strhcpy to copy to heap.
+    // Accept new connections
+    errno  = 0;
+    connfd = accept(sockfd, NULL, 0);
+    if(connfd < 0)
+    {
+        if(errno != EINTR)
+        {
+            perror("Accept failed");
+        }
 
-    // Serialize the packet
-    ctx->out_header.payload_len = (uint16_t)serialize_sys_error(&ctx->out_bytes, &packet_error, &ctx->err) - PACKET_CLIENT_HEADER_SIZE;
+        return -1;
+    }
+
+    // Add new client to poll list
+    app_state_register_client(state, connfd);
+
+    return 0;
+}
+
+static int handle_client_data_in(app_state_t *state, session_t *session)
+{
+    context_t ctx;
+
+    fsm_state_func perform;
+    fsm_state_t    from_id;
+    fsm_state_t    to_id;
+
+    // Create pipeline context
+    ctx_init(&ctx, state, session);
+    printf("event_loop session_id %d\n", session->id);
+
+    // Set FSM parameters
+    from_id = START;
+    to_id   = REQUEST_HANDLER;
+
+    // Execute FSM pipeline
+    do
+    {
+        perform = fsm_transition(from_id, to_id, transitions, sizeof(transitions));
+        if(perform == NULL)
+        {
+            printf("illegal state %d, %d \n", from_id, to_id);
+            app_state_remove_client_by_session(state, session);
+            return -1;
+        }
+
+        from_id = to_id;
+        to_id   = perform(&ctx);
+    } while(to_id != END);
+
+    ctx_destroy(&ctx);
+
+    return 0;
+}
+
+static int handle_client_disconnect(app_state_t *state, session_t *session)
+{
+    // Client disconnected or error, close and clean up
+    printf("oops...\n");
+    app_state_remove_client_by_session(state, session);
+
+    return 0;
 }
 
 void event_loop(app_state_t *state, int timeout, int *err)
@@ -168,23 +227,7 @@ void event_loop(app_state_t *state, int timeout, int *err)
         // Handle new connections
         if(server_pollfd->revents & POLLIN)
         {
-            int connfd;
-
-            // Accept new connections
-            errno  = 0;
-            connfd = accept(server_pollfd->fd, NULL, 0);
-            if(connfd < 0)
-            {
-                if(errno != EINTR)
-                {
-                    perror("Accept failed");
-                }
-
-                continue;
-            }
-
-            // Add new client to poll list
-            app_state_register_client(state, connfd);
+            handle_server_incoming_connections(state, server_pollfd->fd);
         }
 
         // Check existing clients for data
@@ -200,43 +243,12 @@ void event_loop(app_state_t *state, int timeout, int *err)
 
             if(client_pollfd->revents & POLLIN)    // If a [valid] client has incoming data...
             {
-                context_t ctx;
-
-                fsm_state_func perform;
-                fsm_state_t    from_id;
-                fsm_state_t    to_id;
-
-                // Create pipeline context
-                ctx_init(&ctx, state, client_session);
-                printf("event_loop session_id %d\n", client_session->id);
-
-                // Set FSM parameters
-                from_id = START;
-                to_id   = REQUEST_HANDLER;
-
-                // Execute FSM pipeline
-                do
-                {
-                    perform = fsm_transition(from_id, to_id, transitions, sizeof(transitions));
-                    if(perform == NULL)
-                    {
-                        printf("illegal state %d, %d \n", from_id, to_id);
-                        app_state_remove_client_by_session(state, client_session);
-                        break;
-                    }
-
-                    from_id = to_id;
-                    to_id   = perform(&ctx);
-                } while(to_id != END);
-
-                ctx_destroy(&ctx);
+                handle_client_data_in(state, client_session);
             }
 
             if(client_pollfd->revents & (POLLHUP | POLLERR))    //  If they have disconnected gracefully or from a fatal error...
             {
-                // Client disconnected or error, close and clean up
-                printf("oops...\n");
-                app_state_remove_client_by_session(state, client_session);
+                handle_client_disconnect(state, client_session);
             }
         }
     }
@@ -408,7 +420,13 @@ fsm_state_t error_handler(void *args)
 
     if(ctx->in_header.packet_type != ACC_Logout)    // NOTE: Unsure when ACC_LOGOUT would ever have a chance to err.
     {
-        error_response(ctx);
+        // Define packet_sys_error parameters
+        packet_error.header = NULL;
+        packet_error.code   = (uint8_t)ctx->code;
+        strhcpy(&packet_error.message, packet_error_str(packet_error.code));    // packet_error_str returns const char *, which packet_error.msg doesn't like... Use strhcpy to copy to heap.
+
+        // Serialize the packet
+        ctx->out_header.payload_len = (uint16_t)serialize_sys_error(&ctx->out_bytes, &packet_error, &ctx->err) - PACKET_CLIENT_HEADER_SIZE;
     }
     printf("response_len: %d\n", (PACKET_CLIENT_HEADER_SIZE + ctx->out_header.payload_len));
 
